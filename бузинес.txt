@@ -1,0 +1,113 @@
+import pandas as pd
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.decomposition import NMF
+import tkinter as tk
+
+# Загрузите набор данных с правильным разделителем
+data = pd.read_csv('fashion_dataset.csv', delimiter=';')  # Используйте правильный разделитель
+print(data.columns)  # Выводим названия столбцов
+
+# Clean the data (remove duplicates, handle missing values, etc.)
+data = data.drop_duplicates()
+data = data.dropna()
+
+# Transform categorical variables into numerical representations
+data['color'] = pd.Categorical(data['color']).codes
+data['style'] = pd.Categorical(data['style']).codes
+data['weather'] = pd.Categorical(data['weather']).codes
+
+# Split the data into features and target variables
+X = data[['color', 'style', 'weather']].copy()
+y = data['comb']
+print("Preprocessed data shape:", X.shape)
+
+# Используем X как матрицу признаков для предметов одежды
+item_features = X  # Используем ранее созданный датафрейм X
+
+# Вычисляем косинусное сходство между признаками предметов
+similarity_matrix = cosine_similarity(item_features)
+
+# Создаем оценку сходства для каждого предмета
+item_similarity_scores = similarity_matrix.mean(axis=1)
+
+# Добавляем оценку сходства в матрицу признаков
+X.loc[:, 'similarity_score'] = item_similarity_scores
+print("Feature matrix shape:", X.shape)
+
+# Предполагаем, что у нас есть матрица оценок пользователей
+num_users = 5  # Количество пользователей
+num_items = 10  # Количество предметов
+user_item_matrix = np.random.randint(0, 6, size=(num_users, num_items))
+
+# Названия предметов
+item_names = [f'item_{i+1}' for i in range(num_items)]
+
+# Выполняем факторизацию матрицы
+model = NMF(n_components=10)  # Количество скрытых факторов
+W = model.fit_transform(user_item_matrix)
+H = model.components_
+
+# Получаем рекомендации для конкретного пользователя
+user_index = 0  # Индекс пользователя, для которого мы хотим получить рекомендации
+user_preferences = W[user_index, :]
+predicted_ratings = np.dot(user_preferences, H)
+top_items_indices = predicted_ratings.argsort()[-5:][::-1]  # Топ-5 рекомендованных предметов
+top_items = [item_names[i] for i in top_items_indices]  # Получаем названия рекомендованных предметов
+print("Top recommended items:", top_items)
+
+# Функция для получения погодных условий
+def get_weather():
+    # Ввод пользователем состояния погоды
+    weather = input("Enter the current weather condition (e.g., warm, cold, rainy): ")
+    return weather
+
+# Создаем GUI
+def get_recommendations():
+    # Получаем предпочтения пользователя и погодные условия
+    preferred_color = color_entry.get()
+    preferred_style = style_entry.get()
+    weather_condition = get_weather()  # Предполагается, что эта функция возвращает строку с погодой
+
+    # Фильтруем данные на основе предпочтений пользователя и погодных условий
+    filtered_data = data[(data['color'] == preferred_color) &
+                         (data['style'] == preferred_style) &
+                         (data['weather'] == weather_condition)]
+
+    # Проверяем, есть ли подходящие наряды
+    if not filtered_data.empty:
+        # Генерируем рекомендации по нарядам
+        outfit_count = min(5, len(filtered_data))  # Определяем, сколько нарядов выбрать
+        outfit_recommendations = filtered_data['comb'].sample(outfit_count).tolist()
+    else:
+        outfit_recommendations = ["No outfits match your preferences."]  # Сообщение, если нет подходящих нарядов
+
+    # Очищаем предыдущие рекомендации и отображаем новые
+    recommendations_text.delete('1.0', tk.END)
+    for outfit in outfit_recommendations:
+        recommendations_text.insert(tk.END, outfit + '\n')
+
+# Создаем окно GUI
+window = tk.Tk()
+window.title("Fashion Stylist")
+
+# Создаем метки и поля ввода для предпочтений пользователя
+color_label = tk.Label(window, text="Preferred Color:")
+color_label.pack()
+color_entry = tk.Entry(window)
+color_entry.pack()
+
+style_label = tk.Label(window, text="Preferred Style:")
+style_label.pack()
+style_entry = tk.Entry(window)
+style_entry.pack()
+
+recommend_button = tk.Button(window, text="Get Recommendations", command=get_recommendations)
+recommend_button.pack()
+
+# Создаем текстовое поле для отображения рекомендаций
+recommendations_text = tk.Text(window, height=10, width=50)
+recommendations_text.pack()
+
+# Запускаем GUI
+window.mainloop()
